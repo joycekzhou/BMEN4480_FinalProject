@@ -1,0 +1,54 @@
+---
+title: "ML_Final_Project"
+author: "C.L. Slater"
+date: "3/21/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(Matrix)
+library(rjson)
+library(cowplot)
+library(RColorBrewer)
+library(grid)
+library(readbitmap)
+library(Seurat)
+library(dplyr)
+library(hdf5r)
+library(data.table)
+```
+
+```{r}
+test_image = Read10X_Image(image.dir = '~/Documents\GitHub\BMEN4480_FinalProject\Spatial_Analysis', image.name = "tissue_lowres_image.png")
+```
+
+```{r}
+data_dir <- '~/Coursework/2022_01_18_Statistical_ML_for_Genomics/Final_Project'
+
+brain <- Load10X_Spatial(data.dir = data_dir, image = test_image)
+```
+
+```{r}
+SpatialFeaturePlot(brain, features = "nCount_Spatial", image.alpha = c(0,0),pt.size.factor = 2.75) + theme(legend.position = "right")
+```
+
+```{r}
+
+```
+
+```{r}
+SpatialFeaturePlot(brain, features = "Ccl2", image.alpha=c(0,0),alpha = c(1,1),pt.size.factor = 2.75)
+```
+
+```{r}
+SpatialFeaturePlot(brain, features = "Tmem119", image.alpha=c(0,0),alpha = c(1,1),pt.size.factor = 2.75)
+```
+
+```{r}
+SpatialFeaturePlot(brain, features = "Gpr84", image.alpha=c(0,0),alpha = c(1,1),pt.size.factor = 2.75)
+```
