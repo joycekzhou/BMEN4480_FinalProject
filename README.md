@@ -2,7 +2,7 @@
 
 ## microglia_clusters
 
-Summary:
+Description:
 Analysis of microglia scRNA-seq dataset to cluster and characterize microglial activation states
 
 Input data:
@@ -13,7 +13,7 @@ Raw counts matrix and metadata csv files for subsequent RCTD analysis
 
 ## merge_microglia_all
 
-Summary: Merge microglia and primary motor cortex scRNA-seq datasets
+Description: Merge microglia and primary motor cortex scRNA-seq datasets
 
 Input data:
 1) Sousa, C., Golebiewska, A., Poovathingal, S.K. et al. Single-cell transcriptomics reveals distinct inflammation-induced microglia signatures. EMBO Reports (2018).
