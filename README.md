@@ -3,7 +3,7 @@
 ## microglia_clusters
 
 Summary:
-Analysis of microglia scRNA-seq dataset to cluster and characterize microgial activation states
+Analysis of microglia scRNA-seq dataset to cluster and characterize microglial activation states
 
 Input data:
 Sousa, C., Golebiewska, A., Poovathingal, S.K. et al. Single-cell transcriptomics reveals distinct inflammation-induced microglia signatures. EMBO Reports (2018).
