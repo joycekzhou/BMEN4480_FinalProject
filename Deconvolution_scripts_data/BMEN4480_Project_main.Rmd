@@ -1,0 +1,348 @@
+---
+title: "Custom Implementation of RCTD"
+author: "Cody Slater"
+date: "April 24, 2022"
+---
+
+```{r setup}
+library(spacexr)
+library(Matrix)
+library(doParallel)
+library(ggplot2)
+```
+
+```{r, include = TRUE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  cache = TRUE,
+  out.width = "100%"
+)
+```
+
+## Introduction
+
+The following is a script to apply the custom gene definition from single cell datasets to spatial Visium data.
+
+## Load data for comparison between baseline labeling and enhanced microglial labeling on LPS 1
+
+Load all the required info for the spatial data into a puck and visualize the nUMIs distributed across the sample.
+
+```{r Run RCTD on baseline grouping}
+### Load in/preprocess your data, this might vary based on your file type
+counts <- as.data.frame(readr::read_csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/counts_LPS1.csv")) # load in counts matrix
+coords <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/coords_LPS1.csv")
+rownames(counts) <- counts[,1]; counts[,1] <- NULL # Move first column to rownames
+rownames(coords) <- coords[,1]; coords[,1] <- NULL # Move first column to rownames
+nUMI <- colSums(counts) # In this case, total counts per pixel is nUMI
+puck <- SpatialRNA(coords, counts, nUMI)
+barcodes <- colnames(puck@counts) # pixels to be used (a list of barcode names). 
+plot_puck_continuous(puck, barcodes, puck@nUMI, ylimit = c(0,round(quantile(puck@nUMI,0.9))), title ='plot of nUMI', size = 1.75) 
+
+```
+
+```{r}
+counts <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/counts_orig.csv") # load in cell types
+rownames(counts) <- counts[,1]; counts[,1] <- NULL # Move first column to rownames
+cell_types <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/cell_types_orig.csv") # load in cell types
+cell_types <- setNames(cell_types[[2]], cell_types[[1]])
+cell_types <- as.factor(cell_types) # convert to factor data type
+nUMI <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/nUMI_orig.csv") # load in cell types
+nUMI <- setNames(nUMI[[2]], nUMI[[1]])
+reference <- Reference(counts, cell_types, nUMI)
+myRCTD <- create.RCTD(puck, reference, max_cores = 32)
+myRCTD <- run.RCTD(myRCTD, doublet_mode = 'full')
+saveRDS(myRCTD,'myRCTD_visium_full.rds')
+
+myRCTD <- readRDS("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/myRCTD_visium_full.rds")
+barcodes <- colnames(myRCTD@spatialRNA@counts)
+weights <- myRCTD@results$weights
+norm_weights <- normalize_weights(weights)
+cell_types <- c('Neuron.Slc17a6', 'Interneuron', 'Astrocyte','Microglia_Macrophages','Oligodendrocyte')
+print(head(norm_weights[,cell_types])) # observe weight values
+plot_puck_continuous(myRCTD@spatialRNA, barcodes, norm_weights[,'Microglia_Macrophages'], ylimit = c(0,0.5), title ='plot of Microglia weights', size=1.5) # plot microglia/macrophage generic
+```
+
+Load all the required reference data into the reference object and run RCTD
+
+```{r Run RCTD on stratified microglial groupings}
+### Load in/preprocess your data, this might vary based on your file type
+counts <- as.data.frame(readr::read_csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/counts_LPS1.csv")) # load in counts matrix
+coords <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/coords_LPS1.csv")
+rownames(counts) <- counts[,1]; counts[,1] <- NULL # Move first column to rownames
+rownames(coords) <- coords[,1]; coords[,1] <- NULL # Move first column to rownames
+nUMI <- colSums(counts) # In this case, total counts per pixel is nUMI
+puck <- SpatialRNA(coords, counts, nUMI)
+barcodes <- colnames(puck@counts) # pixels to be used (a list of barcode names). 
+plot_puck_continuous(puck, barcodes, puck@nUMI, ylimit = c(0,round(quantile(puck@nUMI,0.9))), title ='plot of nUMI', size = 1.5) 
+```
+
+```{r}
+counts = as.data.frame(readr::read_csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/counts_micro_groups.csv")) # load in cell types
+rownames(counts) <- counts[,1]; counts[,1] <- NULL # Move first column to rownames
+cell_types <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/cell_types_micro_groups.csv") # load in cell types
+cell_types <- setNames(cell_types[[2]], cell_types[[1]])
+cell_types <- as.factor(cell_types) # convert to factor data type
+nUMI <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/nUMI_micro_groups.csv") # load in cell types
+nUMI <- setNames(nUMI[[2]], nUMI[[1]])
+reference <- Reference(counts, cell_types, nUMI)
+myRCTD <- create.RCTD(puck, reference, max_cores = 32)
+myRCTD <- run.RCTD(myRCTD, doublet_mode = 'full')
+saveRDS(myRCTD,'myRCTD_visium_LPS1_w_groups.rds')
+
+myRCTD <- readRDS("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/myRCTD_visium_LPS1_w_groups.rds")
+barcodes <- colnames(myRCTD@spatialRNA@counts)
+weights <- myRCTD@results$weights
+norm_weights <- normalize_weights(weights)
+cell_types <- c('Neuron.Slc17a6', 'Interneuron', 'Astrocyte','Microglia_Macrophages','Oligodendrocyte','homeostatic','intermediate activated','activated')
+print(head(norm_weights[,cell_types])) # observe weight values
+
+```
+
+```{r}
+myRCTD <- readRDS("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/myRCTD_visium_LPS1_w_groups.rds")
+barcodes <- colnames(myRCTD@spatialRNA@counts)
+weights <- myRCTD@results$weights
+norm_weights <- normalize_weights(weights)
+cell_types <- c('Neuron.Slc17a6', 'Interneuron', 'Astrocyte','Microglia_Macrophages','Oligodendrocyte','homeostatic','intermediate activated','activated')
+#(head(norm_weights[,cell_types])) # observe weight values
+
+plot_puck_continuous(myRCTD@spatialRNA, barcodes, norm_weights[,'homeostatic'], ylimit = c(0,0.5), title ='plot of homeostatic microglia weights with LPS', size=1.75) # plot of homeostatic microglia 
+plot_puck_continuous(myRCTD@spatialRNA, barcodes, norm_weights[,'intermediate activated'], ylimit = c(0,0.5), title ='plot of intermediate activated microglia weights with LPS', size=1.75) # plot of intermediate activated microglia 
+plot_puck_continuous(myRCTD@spatialRNA, barcodes, norm_weights[,'activated'], ylimit = c(0,0.5), title ='plot of activated microglia weights with LPS', size=1.75) # plot of activated microglia 
+```
+
+## Load data for comparison between baseline labeling and enhanced microglial labeling on SALINE 2 sample
+
+Load all the required info for the spatial data into a puck and visualize the nUMIs distributed across the sample.
+
+```{r}
+### Load in/preprocess your data, this might vary based on your file type
+counts <- as.data.frame(readr::read_csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/counts_SAL2.csv")) # load in counts matrix
+coords <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/coords_SAL2.csv")
+rownames(counts) <- counts[,1]; counts[,1] <- NULL # Move first column to rownames
+rownames(coords) <- coords[,1]; coords[,1] <- NULL # Move first column to rownames
+nUMI <- colSums(counts) # In this case, total counts per pixel is nUMI
+puck <- SpatialRNA(coords, counts, nUMI)
+barcodes <- colnames(puck@counts) # pixels to be used (a list of barcode names). 
+plot_puck_continuous(puck, barcodes, puck@nUMI, ylimit = c(0,round(quantile(puck@nUMI,0.9))), title ='plot of nUMI', size = 1.5) 
+
+counts = as.data.frame(readr::read_csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/counts_micro_groups.csv")) # load in cell types
+rownames(counts) <- counts[,1]; counts[,1] <- NULL # Move first column to rownames
+cell_types <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/cell_types_micro_groups.csv") # load in cell types
+cell_types <- setNames(cell_types[[2]], cell_types[[1]])
+cell_types <- as.factor(cell_types) # convert to factor data type
+nUMI <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/nUMI_micro_groups.csv") # load in cell types
+nUMI <- setNames(nUMI[[2]], nUMI[[1]])
+reference <- Reference(counts, cell_types, nUMI)
+myRCTD <- create.RCTD(puck, reference, max_cores = 32)
+myRCTD <- run.RCTD(myRCTD, doublet_mode = 'full')
+saveRDS(myRCTD,'myRCTD_visium_SAL2_w_groups.rds')
+```
+
+```{r}
+myRCTD <- readRDS("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/myRCTD_visium_SAL2_w_groups.rds")
+barcodes <- colnames(myRCTD@spatialRNA@counts)
+weights <- myRCTD@results$weights
+norm_weights <- normalize_weights(weights)
+cell_types <- c('Neuron.Slc17a6', 'Interneuron', 'Astrocyte','Microglia_Macrophages','Oligodendrocyte','homeostatic','intermediate activated','activated')
+#(head(norm_weights[,cell_types])) # observe weight values
+
+plot_puck_continuous(myRCTD@spatialRNA, barcodes, norm_weights[,'homeostatic'], ylimit = c(0,0.5), title ='plot of homeostatic microglia weights with LPS', size=1.25) # plot of homeostatic microglia 
+plot_puck_continuous(myRCTD@spatialRNA, barcodes, norm_weights[,'intermediate activated'], ylimit = c(0,0.5), title ='plot of intermediate activated microglia weights with LPS', size=1.25) # plot of homeostatic microglia 
+plot_puck_continuous(myRCTD@spatialRNA, barcodes, norm_weights[,'activated'], ylimit = c(0,0.5), title ='plot of activated microglia weights with LPS', size=1.25) # plot of homeostatic microglia 
+```
+
+## Load data for comparison between baseline labeling and enhanced microglial labeling on SALINE 3 sample
+
+Load all the required info for the spatial data into a puck and visualize the nUMIs distributed across the sample.
+
+```{r with generic groups}
+### Load in/preprocess your data, this might vary based on your file type
+counts <- as.data.frame(readr::read_csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/counts_SAL3.csv")) # load in counts matrix
+coords <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/coords_SAL3.csv")
+rownames(counts) <- counts[,1]; counts[,1] <- NULL # Move first column to rownames
+rownames(coords) <- coords[,1]; coords[,1] <- NULL # Move first column to rownames
+nUMI <- colSums(counts) # In this case, total counts per pixel is nUMI
+puck <- SpatialRNA(coords, counts, nUMI)
+barcodes <- colnames(puck@counts) # pixels to be used (a list of barcode names). 
+plot_puck_continuous(puck, barcodes, puck@nUMI, ylimit = c(0,round(quantile(puck@nUMI,0.9))), title ='plot of nUMI', size = 1.5) 
+
+counts = as.data.frame(readr::read_csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/counts_orig.csv")) # load in cell types
+rownames(counts) <- counts[,1]; counts[,1] <- NULL # Move first column to rownames
+cell_types <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/cell_types_orig.csv") # load in cell types
+cell_types <- setNames(cell_types[[2]], cell_types[[1]])
+cell_types <- as.factor(cell_types) # convert to factor data type
+nUMI <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/nUMI_orig.csv") # load in cell types
+nUMI <- setNames(nUMI[[2]], nUMI[[1]])
+reference <- Reference(counts, cell_types, nUMI)
+myRCTD <- create.RCTD(puck, reference, max_cores = 32)
+myRCTD <- run.RCTD(myRCTD, doublet_mode = 'full')
+saveRDS(myRCTD,'myRCTD_visium_SAL3_generic.rds')
+```
+
+```{r with generic groups}
+myRCTD <- readRDS("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/myRCTD_visium_SAL3_generic.rds")
+barcodes <- colnames(myRCTD@spatialRNA@counts)
+weights <- myRCTD@results$weights
+norm_weights <- normalize_weights(weights)
+cell_types <- c('Neuron.Slc17a6', 'Interneuron', 'Astrocyte','Microglia_Macrophages','Oligodendrocyte')
+#(head(norm_weights[,cell_types])) # observe weight values
+
+plot_puck_continuous(myRCTD@spatialRNA, barcodes, norm_weights[,'Microglia_Macrophages'], ylimit = c(0,0.5), title ='plot of generic microglia/macrophage weights with saline', size=1.1) # plot of homeostatic microglia 
+```
+
+```{r}
+### Load in/preprocess your data, this might vary based on your file type
+counts <- as.data.frame(readr::read_csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/counts_SAL3.csv")) # load in counts matrix
+coords <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/coords_SAL3.csv")
+rownames(counts) <- counts[,1]; counts[,1] <- NULL # Move first column to rownames
+rownames(coords) <- coords[,1]; coords[,1] <- NULL # Move first column to rownames
+nUMI <- colSums(counts) # In this case, total counts per pixel is nUMI
+puck <- SpatialRNA(coords, counts, nUMI)
+barcodes <- colnames(puck@counts) # pixels to be used (a list of barcode names). 
+plot_puck_continuous(puck, barcodes, puck@nUMI, ylimit = c(0,round(quantile(puck@nUMI,0.9))), title ='plot of nUMI', size = 1.5) 
+
+counts = as.data.frame(readr::read_csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/counts_micro_groups.csv")) # load in cell types
+rownames(counts) <- counts[,1]; counts[,1] <- NULL # Move first column to rownames
+cell_types <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/cell_types_micro_groups.csv") # load in cell types
+cell_types <- setNames(cell_types[[2]], cell_types[[1]])
+cell_types <- as.factor(cell_types) # convert to factor data type
+nUMI <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/nUMI_micro_groups.csv") # load in cell types
+nUMI <- setNames(nUMI[[2]], nUMI[[1]])
+reference <- Reference(counts, cell_types, nUMI)
+myRCTD <- create.RCTD(puck, reference, max_cores = 32)
+myRCTD <- run.RCTD(myRCTD, doublet_mode = 'full')
+saveRDS(myRCTD,'myRCTD_visium_SAL3_w_groups.rds')
+```
+
+```{r}
+myRCTD <- readRDS("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/myRCTD_visium_SAL3_w_groups.rds")
+barcodes <- colnames(myRCTD@spatialRNA@counts)
+weights <- myRCTD@results$weights
+norm_weights <- normalize_weights(weights)
+cell_types <- c('Neuron.Slc17a6', 'Interneuron', 'Astrocyte','Microglia_Macrophages','Oligodendrocyte','homeostatic','intermediate activated','activated')
+#(head(norm_weights[,cell_types])) # observe weight values
+
+plot_puck_continuous(myRCTD@spatialRNA, barcodes, norm_weights[,'homeostatic'], ylimit = c(0,0.5), title ='plot of homeostatic microglia weights with saline', size=1.25) # plot of homeostatic microglia 
+plot_puck_continuous(myRCTD@spatialRNA, barcodes, norm_weights[,'intermediate activated'], ylimit = c(0,0.5), title ='plot of intermediate activated microglia weights with saline', size=1.25) # plot of homeostatic microglia 
+plot_puck_continuous(myRCTD@spatialRNA, barcodes, norm_weights[,'activated'], ylimit = c(0,0.5), title ='plot of activated microglia weights with saline', size=1.25) # plot of homeostatic microglia 
+```
+
+## Load data for comparison between baseline labeling and enhanced microglial labeling on LPS 2 sample
+
+Load all the required info for the spatial data into a puck and visualize the nUMIs distributed across the sample.
+
+```{r}
+### Load in/preprocess your data, this might vary based on your file type
+counts <- as.data.frame(readr::read_csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/counts_LPS2.csv")) # load in counts matrix
+coords <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/coords_LPS2.csv")
+rownames(counts) <- counts[,1]; counts[,1] <- NULL # Move first column to rownames
+rownames(coords) <- coords[,1]; coords[,1] <- NULL # Move first column to rownames
+nUMI <- colSums(counts) # In this case, total counts per pixel is nUMI
+puck <- SpatialRNA(coords, counts, nUMI)
+barcodes <- colnames(puck@counts) # pixels to be used (a list of barcode names). 
+plot_puck_continuous(puck, barcodes, puck@nUMI, ylimit = c(0,round(quantile(puck@nUMI,0.9))), title ='plot of nUMI', size = 1.5) 
+
+counts = as.data.frame(readr::read_csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/counts_micro_groups.csv")) # load in cell types
+rownames(counts) <- counts[,1]; counts[,1] <- NULL # Move first column to rownames
+cell_types <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/cell_types_micro_groups.csv") # load in cell types
+cell_types <- setNames(cell_types[[2]], cell_types[[1]])
+cell_types <- as.factor(cell_types) # convert to factor data type
+nUMI <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/nUMI_micro_groups.csv") # load in cell types
+nUMI <- setNames(nUMI[[2]], nUMI[[1]])
+reference <- Reference(counts, cell_types, nUMI)
+myRCTD <- create.RCTD(puck, reference, max_cores = 32)
+myRCTD <- run.RCTD(myRCTD, doublet_mode = 'full')
+saveRDS(myRCTD,'myRCTD_visium_LPS2_w_groups.rds')
+```
+
+```{r}
+myRCTD <- readRDS("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/myRCTD_visium_LPS2_w_groups.rds")
+barcodes <- colnames(myRCTD@spatialRNA@counts)
+weights <- myRCTD@results$weights
+norm_weights <- normalize_weights(weights)
+cell_types <- c('Neuron.Slc17a6', 'Interneuron', 'Astrocyte','Microglia_Macrophages','Oligodendrocyte','homeostatic','intermediate activated','activated')
+#(head(norm_weights[,cell_types])) # observe weight values
+
+plot_puck_continuous(myRCTD@spatialRNA, barcodes, norm_weights[,'homeostatic'], ylimit = c(0,0.5), title ='plot of homeostatic microglia weights with LPS', size=1.25) # plot of homeostatic microglia 
+plot_puck_continuous(myRCTD@spatialRNA, barcodes, norm_weights[,'intermediate activated'], ylimit = c(0,0.5), title ='plot of intermediate activated microglia weights with LPS', size=1.25) # plot of homeostatic microglia 
+plot_puck_continuous(myRCTD@spatialRNA, barcodes, norm_weights[,'activated'], ylimit = c(0,0.5), title ='plot of activated microglia weights with LPS', size=1.25) # plot of homeostatic microglia 
+```
+
+## Load data for comparison between baseline labeling and enhanced microglial labeling on LPS 3 sample
+
+Load all the required info for the spatial data into a puck and visualize the nUMIs distributed across the sample.
+
+```{r with generic groups}
+### Load in/preprocess your data, this might vary based on your file type
+counts <- as.data.frame(readr::read_csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/counts_LPS3.csv")) # load in counts matrix
+coords <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/coords_LPS3.csv")
+rownames(counts) <- counts[,1]; counts[,1] <- NULL # Move first column to rownames
+rownames(coords) <- coords[,1]; coords[,1] <- NULL # Move first column to rownames
+nUMI <- colSums(counts) # In this case, total counts per pixel is nUMI
+puck <- SpatialRNA(coords, counts, nUMI)
+barcodes <- colnames(puck@counts) # pixels to be used (a list of barcode names). 
+plot_puck_continuous(puck, barcodes, puck@nUMI, ylimit = c(0,round(quantile(puck@nUMI,0.9))), title ='plot of nUMI', size = 1.5) 
+
+counts = as.data.frame(readr::read_csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/counts_orig.csv")) # load in cell types
+rownames(counts) <- counts[,1]; counts[,1] <- NULL # Move first column to rownames
+cell_types <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/cell_types_orig.csv") # load in cell types
+cell_types <- setNames(cell_types[[2]], cell_types[[1]])
+cell_types <- as.factor(cell_types) # convert to factor data type
+nUMI <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/nUMI_orig.csv") # load in cell types
+nUMI <- setNames(nUMI[[2]], nUMI[[1]])
+reference <- Reference(counts, cell_types, nUMI)
+myRCTD <- create.RCTD(puck, reference, max_cores = 32)
+myRCTD <- run.RCTD(myRCTD, doublet_mode = 'full')
+saveRDS(myRCTD,'myRCTD_visium_LPS3_generic.rds')
+```
+
+```{r with generic groups}
+myRCTD <- readRDS("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/myRCTD_visium_LPS3_generic.rds")
+barcodes <- colnames(myRCTD@spatialRNA@counts)
+weights <- myRCTD@results$weights
+norm_weights <- normalize_weights(weights)
+cell_types <- c('Neuron.Slc17a6', 'Interneuron', 'Astrocyte','Microglia_Macrophages','Oligodendrocyte','homeostatic','intermediate activated','activated')
+#(head(norm_weights[,cell_types])) # observe weight values
+
+plot_puck_continuous(myRCTD@spatialRNA, barcodes, norm_weights[,'Microglia_Macrophages'], ylimit = c(0,0.5), title ='plot of generic microglia/macrophage weights with LPS', size=1.25) # plot of homeostatic microglia 
+
+```
+
+```{r with custom groups}
+### Load in/preprocess your data, this might vary based on your file type
+counts <- as.data.frame(readr::read_csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/counts_LPS3.csv")) # load in counts matrix
+coords <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/coords_LPS3.csv")
+rownames(counts) <- counts[,1]; counts[,1] <- NULL # Move first column to rownames
+rownames(coords) <- coords[,1]; coords[,1] <- NULL # Move first column to rownames
+nUMI <- colSums(counts) # In this case, total counts per pixel is nUMI
+puck <- SpatialRNA(coords, counts, nUMI)
+barcodes <- colnames(puck@counts) # pixels to be used (a list of barcode names). 
+plot_puck_continuous(puck, barcodes, puck@nUMI, ylimit = c(0,round(quantile(puck@nUMI,0.9))), title ='plot of nUMI', size = 1.5) 
+
+counts = as.data.frame(readr::read_csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/counts_micro_groups.csv")) # load in cell types
+rownames(counts) <- counts[,1]; counts[,1] <- NULL # Move first column to rownames
+cell_types <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/cell_types_micro_groups.csv") # load in cell types
+cell_types <- setNames(cell_types[[2]], cell_types[[1]])
+cell_types <- as.factor(cell_types) # convert to factor data type
+nUMI <- read.csv("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/nUMI_micro_groups.csv") # load in cell types
+nUMI <- setNames(nUMI[[2]], nUMI[[1]])
+reference <- Reference(counts, cell_types, nUMI)
+myRCTD <- create.RCTD(puck, reference, max_cores = 32)
+myRCTD <- run.RCTD(myRCTD, doublet_mode = 'full')
+saveRDS(myRCTD,'myRCTD_visium_LPS3_w_groups.rds')
+```
+
+```{r with custom groups}
+myRCTD <- readRDS("~/GitHub/BMEN4480_FinalProject/Cody/reference_datasets/myRCTD_visium_LPS3_w_groups.rds")
+barcodes <- colnames(myRCTD@spatialRNA@counts)
+weights <- myRCTD@results$weights
+norm_weights <- normalize_weights(weights)
+cell_types <- c('Neuron.Slc17a6', 'Interneuron', 'Astrocyte','Microglia_Macrophages','Oligodendrocyte','homeostatic','intermediate activated','activated')
+#(head(norm_weights[,cell_types])) # observe weight values
+
+plot_puck_continuous(myRCTD@spatialRNA, barcodes, norm_weights[,'homeostatic'], ylimit = c(0,0.5), title ='plot of homeostatic microglia weights with LPS', size=1.25) # plot of homeostatic microglia 
+plot_puck_continuous(myRCTD@spatialRNA, barcodes, norm_weights[,'intermediate activated'], ylimit = c(0,0.5), title ='plot of intermediate activated microglia weights with LPS', size=1.25) # plot of homeostatic microglia 
+plot_puck_continuous(myRCTD@spatialRNA, barcodes, norm_weights[,'activated'], ylimit = c(0,0.5), title ='plot of activated microglia weights with LPS', size=1.25) # plot of homeostatic microglia 
+```
